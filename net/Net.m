@@ -178,7 +178,7 @@ classdef Net < handle
                 legend( { 'Val', 'Net selected' } );
                 grid on; hold off;
             else
-                fprintf( '%s: Cannot choose the best.\n', upper( mfilename ) );
+                fprintf( '%s: Cannot choose the best. (More than one metric.)\n', upper( mfilename ) );
             end;
         end
         % 4. PROVIDE CURRENT NETWORK.
