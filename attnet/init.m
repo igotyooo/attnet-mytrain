@@ -1,6 +1,6 @@
 % Set lib path only.
 global path;
-path.lib.matConvNet = '/nickel/lib/matconvnet-1.0-beta12/';
+path.lib.matConvNet = '/nickel/lib/matconvnet-1.0-beta12_cudnn0/';
 path.lib.vocDevKit = '/nickel/datain/PASCALVOC/VOCdevkit/';
 % Set dst dir.
 path.dstDir = '/nickel/dataout/attnet';
