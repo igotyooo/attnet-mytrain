@@ -37,6 +37,7 @@ classdef AttNet < handle
             this.settingDet0.onlyTargetAndBackground  = false;      % Ignored if 'DYNAMIC'.
             this.settingDet0.directionVectorSize      = 30;
             this.settingDet0.minNumDetectionPerClass  = 0;
+            this.settingDet0.weightDirection 	      = 0.5;
             this.settingMrg0.mergingOverlap           = 0.8;
             this.settingMrg0.mergingType              = 'OV';
             this.settingMrg0.mergingMethod            = 'WAVG';
@@ -49,7 +50,7 @@ classdef AttNet < handle
             this.settingDet1.onlyTargetAndBackground  = false;      % Ignored if 'DYNAMIC'.
             this.settingDet1.directionVectorSize      = 30;
             this.settingDet1.minNumDetectionPerClass  = 0;
-            this.settingDet1.weightDirection          = 0;
+            this.settingDet1.weightDirection          = 0.5;
             this.settingMrg1.mergingOverlap           = 0.6;
             this.settingMrg1.mergingType              = 'OV';
             this.settingMrg1.mergingMethod            = 'WAVG';
@@ -619,11 +620,11 @@ classdef AttNet < handle
             x = res( targetLayer + 1 ).x; clear res; clear im;
             y = vl_nnconv( x, weight, bias, 'pad', 0, 'stride', 1 ); clear x;
             % Softmax.
-            dims = 1 : ( 4 * 2 * numel( cidx2cid ) );
-            dims = reshape( dims, [ 4, 2 * numel( cidx2cid ) ] );
-            for d = dims, y( :, :, d, : ) = vl_nnsoftmax( y( :, :, d, : ) ); end;
-            dims = ( 1 + 4 * 2 * numel( cidx2cid ) ) : size( y, 3 );
-            y( :, :, dims, : ) = vl_nnsoftmax( y( :, :, dims, : ) );
+            % dims = 1 : ( 4 * 2 * numel( cidx2cid ) );
+            % dims = reshape( dims, [ 4, 2 * numel( cidx2cid ) ] );
+            % for d = dims, y( :, :, d, : ) = vl_nnsoftmax( y( :, :, d, : ) ); end;
+            % dims = ( 1 + 4 * 2 * numel( cidx2cid ) ) : size( y, 3 );
+            % y( :, :, dims, : ) = vl_nnsoftmax( y( :, :, dims, : ) );
             y = gather( y );
         end
         function [ did2tlbr, did2score, did2cid, fid2boxes ] = dynamicFitting...
@@ -632,6 +633,7 @@ classdef AttNet < handle
             numTopCls = detParams.numTopClassification;
             numTopDir = detParams.numTopDirection;
             dvecSize = detParams.directionVectorSize;
+            weightDirection = detParams.weightDirection;
             testBatchSize = 256 / 2;
             numMaxFeed = 50;
             interpolation = 'bilinear';
@@ -646,11 +648,11 @@ classdef AttNet < handle
             signDiag = 2;
             numRegn = size( rid2tlbr, 2 );
             buffSize = 5000;
-            if ~numRegn, 
-                did2tlbr = zeros( 4, 0, 'single' ); 
-                did2score = zeros( 0, 1, 'single' ); 
-                did2cid = zeros( 0, 1, 'single' ); 
-                return; 
+            if ~numRegn,
+                did2tlbr = zeros( 4, 0, 'single' );
+                did2score = zeros( 0, 1, 'single' );
+                did2cid = zeros( 0, 1, 'single' );
+                return;
             end;
             % Detection on each region.
             did2tlbr = zeros( 4, buffSize, 'single' );
@@ -709,7 +711,7 @@ classdef AttNet < handle
                     rid2purebred = false( 1, numRegn );
                     rid2purebred( nid2rid( nid2purebred ) ) = true;
                     % Find and store detections.
-                    rid2det = rid2ss & rid2purebred & rid2top; 
+                    rid2det = rid2ss & rid2purebred & rid2top;
                     numDet = sum( rid2det );
                     dids = did : did + numDet - 1;
                     did2tlbr( :, dids ) = rid2tlbr( :, rid2det );
@@ -717,10 +719,10 @@ classdef AttNet < handle
                     didx2outTl = rid2outTl( :, rid2det );
                     didx2outBr = rid2outBr( :, rid2det );
                     didx2outCls = rid2outCls( :, rid2det );
-                    didx2scoreTl = didx2outTl( signStop, : );
-                    didx2scoreBr = didx2outBr( signStop, : );
-                    didx2scoreCls = didx2outCls( cidx, : );
-                    did2score( dids ) = ( didx2scoreTl + didx2scoreBr ) / 2 + didx2scoreCls;
+                    didx2scoreTl = ( didx2outTl( signStop, : ) * 2 - sum( didx2outTl, 1 ) ) / numDimPerDirLyr;
+                    didx2scoreBr = ( didx2outBr( signStop, : ) * 2 - sum( didx2outBr, 1 ) ) / numDimPerDirLyr;
+                    didx2scoreCls = ( didx2outCls( cidx, : ) * 2 - sum( didx2outCls, 1 ) ) / numDimClsLyr;
+                    did2score( dids ) = ( didx2scoreTl + didx2scoreBr ) / 2 * weightDirection + didx2scoreCls * ( 1 - weightDirection );
                     did2fill( dids ) = true;
                     did = did + numDet;
                     if nargout == 4,
@@ -770,7 +772,7 @@ classdef AttNet < handle
             onlyTarAndBgd = detParams.onlyTargetAndBackground;
             dvecSize = detParams.directionVectorSize;
             minNumDetPerCls = detParams.minNumDetectionPerClass;
-            weightDirection = 1; % this.settingDet1.weightDirection;
+            weightDirection = detParams.weightDirection;
             testBatchSize = 256 / 2;
             numMaxFeed = 50;
             interpolation = 'bilinear';
@@ -784,11 +786,11 @@ classdef AttNet < handle
             signStop = numDimPerDirLyr;
             numRegn = size( rid2tlbr, 2 );
             buffSize = numel( nid2rid );
-            if ~numRegn, 
-                did2tlbr = zeros( 4, 0, 'single' ); 
-                did2score = zeros( 0, 1, 'single' ); 
-                did2cid = zeros( 0, 1, 'single' ); 
-                return; 
+            if ~numRegn,
+                did2tlbr = zeros( 4, 0, 'single' );
+                did2score = zeros( 0, 1, 'single' );
+                did2cid = zeros( 0, 1, 'single' );
+                return;
             end;
             % Detection on each region.
             did2tlbr = zeros( 4, buffSize, 'single' );
@@ -846,17 +848,17 @@ classdef AttNet < handle
                     [ ~, crid2ptl ] = max( crid2outTl, [  ], 1 );
                     [ ~, crid2pbr ] = max( crid2outBr, [  ], 1 );
                     crid2ss = crid2ptl == signStop & crid2pbr == signStop;
-                    crid2scoreTl = crid2outTl( signStop, : );
-                    crid2scoreBr = crid2outBr( signStop, : );
-                    crid2scoreCls = crid2outCls( cidx, : );
-                    crid2score = ( crid2scoreTl + crid2scoreBr ) / 2 * weightDirection + crid2scoreCls;
+                    crid2scoreTl = ( crid2outTl( signStop, : ) * 2 - sum( crid2outTl, 1 ) ) / numDimPerDirLyr;
+                    crid2scoreBr = ( crid2outBr( signStop, : ) * 2 - sum( crid2outBr, 1 ) ) / numDimPerDirLyr;
+                    crid2scoreCls = ( crid2outCls( cidx, : ) * 2 - sum( crid2outCls, 1 ) ) / numDimClsLyr;
+                    crid2score = ( crid2scoreTl + crid2scoreBr ) / 2 * weightDirection + crid2scoreCls * ( 1 - weightDirection );
                     % Save history.
                     if minNumDetPerCls,
                         cnt = cnt + 1;
-                        rid2scoreCls = rid2outCls( cidx, : );
-                        rid2scoreTl = rid2out( dimTl( signStop ), : );
-                        rid2scoreBr = rid2out( dimBr( signStop ), : );
-                        rid2score = ( rid2scoreTl + rid2scoreBr ) / 2 * weightDirection + rid2scoreCls;
+                        rid2scoreTl = ( rid2out( dimTl( signStop ), : ) * 2 - sum( rid2out( dimTl, : ), 1 ) ) / numDimPerDirLyr;
+                        rid2scoreBr = ( rid2out( dimBr( signStop ), : ) * 2 - sum( rid2out( dimBr, : ), 1 ) ) / numDimPerDirLyr;
+                        rid2scoreCls = ( rid2outCls( cidx, : ) * 2 - sum( rid2outCls, 1 ) ) / numDimClsLyr;
+                        rid2score = ( rid2scoreTl + rid2scoreBr ) / 2 * weightDirection + rid2scoreCls * ( 1 - weightDirection );
                         rid2history{ cnt } = cat( 1, rid2tlbr( 1 : 4, : ), cidx * ones( 1, size( rid2tlbr, 2 ) ), rid2score );
                     end;
                     % Find and store detections.
@@ -868,7 +870,7 @@ classdef AttNet < handle
                     did2cid( dids ) = cid;
                     did2fill( dids ) = true;
                     did = did + numDet;
-                    if nargout == 4, 
+                    if nargout == 4,
                         fid2boxes{ feed } = cat( 2, fid2boxes{ feed }, ...
                             cat( 1, did2tlbr( :, did2fill ), ones( 1, sum( did2fill ) ) ) );
                     end;
@@ -1037,8 +1039,8 @@ classdef AttNet < handle
         end
     end
     methods( Static )
-       function [ rid2tlbr, rid2score, rid2cid ] = merge...
-               ( rid2tlbr, rid2score, rid2cid, mrgParams )
+        function [ rid2tlbr, rid2score, rid2cid ] = merge...
+                ( rid2tlbr, rid2score, rid2cid, mrgParams )
             mergingOverlap = mrgParams.mergingOverlap;
             mergingType = mrgParams.mergingType;
             mergingMethod = mrgParams.mergingMethod;
@@ -1076,6 +1078,6 @@ classdef AttNet < handle
             [ rid2score, idx ] = sort( rid2score, 'descend' );
             rid2tlbr = rid2tlbr( :, idx );
             rid2cid = rid2cid( idx );
-        end 
+        end
     end
 end
