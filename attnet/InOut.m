@@ -27,6 +27,7 @@ classdef InOut < handle
             this.settingTsDb.numScaling                         = 256;
             this.settingTsDb.dilate                             = 1 / 4;
             this.settingTsDb.normalizeImageMaxSide              = 0;
+            this.settingTsDb.maximumImageSize                   = 9e6;
             % Parameters for task specific db: positive mining.
             this.settingTsDb.posGotoMargin                      = 2;        % [ pix/pix ]
             this.settingTsDb.numQuantizeBetweenStopAndGoto      = 3;
@@ -758,24 +759,11 @@ classdef InOut < handle
                         oid2dpid2posregnsFlip{ oid }{ dpid } = regnsFlip( :, okFlip );
                     end;
                 end;
-                % % Display for debugging.
-                % for oid = 1 : numObj,
-                %     for dpid = 1 : numDirPair,
-                %         im = this.db.iid2impath{ iid };
-                %         if isempty( oid2dpid2posregns{ oid }{ dpid } ), continue; end;
-                %         figure( 1 ); plottlbr( oid2dpid2posregns{ oid }{ dpid }, im, false, 'r' );
-                %         title( sprintf( 'No flip, %s', num2str( this.directions.dpid2dp( :, dpid )' ) ) );
-                %         if isempty( oid2dpid2posregnsFlip{ oid }{ dpid } ), continue; end;
-                %         figure( 2 ); plottlbr( oid2dpid2posregnsFlip{ oid }{ dpid }, im, false, 'r' );
-                %         title( sprintf( 'Flip, %s', num2str( this.directions.dpid2dp( :, dpid )' ) ) );
-                %         waitforbuttonpress;
-                %     end;
-                % end;
                 % Negative mining.
                 imSize0 = this.db.iid2size( :, iid );
                 if maxSide, imSize = normalizeImageSize( maxSide, imSize0 ); else imSize = imSize0; end;
                 sid2size = round( bsxfun( @times, this.scales, imSize ) );
-                maximumImageSize = 9e6;
+                maximumImageSize = this.settingTsDb.maximumImageSize;
                 rid2tlbr = ...
                     extractDenseRegions( ...
                     imSize, ...
